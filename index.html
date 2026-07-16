@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Portal</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f7f6; margin: 0; height: 100vh; position: relative; }
+        .container { background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 350px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        h2, h3 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:hover { background-color: #2980b9; }
+        .toggle-link { text-align: center; margin-top: 15px; font-size: 14px; color: #e74c3c; cursor: pointer; }
+        .hidden { display: none !important; }
+        .dashboard { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 360px; position: absolute; top: 20px; right: 20px; text-align: left; }
+        .balance-section { background-color: #f9f9f9; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 5px solid #2ecc71; display: flex; justify-content: space-between; align-items: center; }
+        .add-btn { background-color: #2ecc71; padding: 8px 15px; border: none; color: #fff; font-size: 14px; border-radius: 4px; cursor: pointer; width: auto; margin-top: 0; }
+        .add-btn:hover { background-color: #27ae60; }
+        .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; border-radius: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.3); z-index: 1000; width: 300px; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
+        .success-box { background: #e8f8f5; border: 1px solid #2ecc71; padding: 10px; border-radius: 4px; color: #27ae60; font-weight: bold; text-align: center; margin-bottom: 15px; }
+    </style>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+
+<div class="container" id="auth-box">
+    <div id="login-form">
+        <h2>Login</h2>
+        <div id="reg-success-msg" class="success-box hidden"></div>
+        <input type="number" id="login-pid" placeholder="Enter 4-Digit Payment ID" required>
+        <input type="password" id="login-password" placeholder="Password" required>
+        <button onclick="handleLogin()">Login</button>
+        <div class="toggle-link" onclick="toggleForm()">Don't have an account? Register here</div>
+    </div>
+
+    <div id="register-form" class="hidden">
+        <h2>Register</h2>
+        <input type="text" id="reg-name" placeholder="Full Name" required>
+        <input type="number" id="reg-mobile" placeholder="Mobile Number" required>
+        <input type="email" id="reg-email" placeholder="Email ID" required>
+        <input type="password" id="reg-password" placeholder="Password" required>
+        <input type="password" id="reg-cpassword" placeholder="Confirm Password" required>
+        <button onclick="handleRegister()">Register</button>
+        <div class="toggle-link" onclick="toggleForm()">Already registered? Login here</div>
+    </div>
+</div>
+
+<div class="dashboard hidden" id="dashboard-box">
+    <h3 style="margin-top: 0;">Welcome Account</h3>
+    <hr style="border: 0; border-top: 1px solid #eee;">
+    <p><strong>Payment ID:</strong> <span id="dash-pid" style="color: #e74c3c; font-weight: bold;"></span></p>
+    <p><strong>Name:</strong> <span id="dash-name"></span></p>
+    <p><strong>Email:</strong> <span id="dash-email"></span></p>
+    
+    <div class="balance-section">
+        <div>
+            <span style="font-size: 13px; color: #7f8c8d;">Account Balance</span><br>
+            <strong style="font-size: 22px; color: #2c3e50;">₹<span id="dash-balance">0</span></strong>
+        </div>
+        <button class="add-btn" onclick="openPaymentModal()">Add Balance</button>
+    </div>
+
+    <button onclick="logout()" style="background-color: #e74c3c;">Logout</button>
+</div>
+
+<div class="modal-overlay hidden" id="payment-overlay"></div>
+<div class="modal hidden" id="payment-modal">
+    <h3 style="margin-top: 0;">Add Balance (Razorpay)</h3>
+    <input type="number" id="pay-amount" placeholder="Enter Amount (INR)" min="1">
+    <button onclick="startRazorpayPayment()" style="background-color: #2ecc71;">Pay Now</button>
+    <button onclick="closePaymentModal()" style="background-color: #7f8c8d; margin-top: 8px;">Cancel</button>
+</div>
+
+<script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxuk0Zv09YJndaQTC_cq6EaXxFelynheCw8VdGFfmvJtB7UnjSr65ywzGovAqp7GsF3/exec"; 
+    const RAZORPAY_KEY = "rzp_test_TDMmk3VbvgWf56"; 
+
+    let loggedInPid = "";
+
+    function toggleForm() {
+        document.getElementById('login-form').classList.remove('hidden');
+        document.getElementById('register-form').classList.add('hidden');
+        document.getElementById('reg-success-msg').classList.add('hidden');
+        if(document.getElementById('register-form').style.display === "block" || !document.getElementById('register-form').classList.contains('hidden')){
+             document.getElementById('login-form').classList.add('hidden');
+             document.getElementById('register-form').classList.remove('hidden');
+        }
+    }
+    
+    function toggleForm(){
+        var login = document.getElementById('login-form');
+        var reg = document.getElementById('register-form');
+        if(login.classList.contains('hidden')){
+            login.classList.remove('hidden');
+            reg.classList.add('hidden');
+        } else {
+            login.classList.add('hidden');
+            reg.classList.remove('hidden');
+        }
+    }
+
+    // REGISTER
+    function handleRegister() {
+        const name = document.getElementById('reg-name').value.trim();
+        const mobile = document.getElementById('reg-mobile').value.trim();
+        const email = document.getElementById('reg-email').value.trim();
+        const password = document.getElementById('reg-password').value;
+        const cpassword = document.getElementById('reg-cpassword').value;
+
+        if(!name || !mobile || !email || !password || !cpassword) {
+            alert("Saare fields bharna zaroori hai!");
+            return;
+        }
+        if(password !== cpassword) {
+            alert("Password match nahi ho rahe hain!");
+            return;
+        }
+
+        const payload = { action: "register", name: name, mobile: mobile, email: email, password: password };
+
+        fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === "success") {
+                alert(data.message);
+                toggleForm();
+                
+                // Login screen par naya payment ID display karna
+                const msgBox = document.getElementById('reg-success-msg');
+                msgBox.innerText = "Registration Successful! Aapki ID: " + data.pid;
+                msgBox.classList.remove('hidden');
+                document.getElementById('login-pid').value = data.pid;
+
+                document.getElementById('reg-name').value = "";
+                document.getElementById('reg-mobile').value = "";
+                document.getElementById('reg-email').value = "";
+                document.getElementById('reg-password').value = "";
+                document.getElementById('reg-cpassword').value = "";
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(err => alert("Registration fail hua."));
+    }
+
+    // LOGIN
+    function handleLogin() {
+        const pid = document.getElementById('login-pid').value.trim();
+        const password = document.getElementById('login-password').value;
+
+        if(!pid || !password) {
+            alert("Payment ID aur Password dono bharein!");
+            return;
+        }
+
+        const payload = { action: "login", pid: pid, password: password };
+
+        fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === "success") {
+                alert("Login Successful!");
+                loggedInPid = data.user.pid; 
+                
+                document.getElementById('auth-box').classList.add('hidden');
+                document.getElementById('dashboard-box').classList.remove('hidden');
+                
+                document.getElementById('dash-pid').innerText = data.user.pid;
+                document.getElementById('dash-name').innerText = data.user.name;
+                document.getElementById('dash-email').innerText = data.user.email || "N/A";
+                document.getElementById('dash-balance').innerText = data.user.balance !== undefined ? data.user.balance : 0;
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(err => alert("Error aaya, login dobara try karein."));
+    }
+
+    function openPaymentModal() {
+        document.getElementById('payment-overlay').classList.remove('hidden');
+        document.getElementById('payment-modal').classList.remove('hidden');
+        document.getElementById('pay-amount').value = "";
+    }
+
+    function closePaymentModal() {
+        document.getElementById('payment-overlay').classList.add('hidden');
+        document.getElementById('payment-modal').classList.add('hidden');
+    }
+
+    // RAZORPAY INTEGRATION WITH PAYMENT ID
+    function startRazorpayPayment() {
+        const amount = document.getElementById('pay-amount').value.trim();
+        if(!amount || amount <= 0) {
+            alert("Kripya sahi amount dalein!");
+            return;
+        }
+
+        var options = {
+            "key": RAZORPAY_KEY, 
+            "amount": Math.round(amount * 100), 
+            "currency": "INR",
+            "name": "User Portal Wallet",
+            "description": "PID: " + loggedInPid, // Backend isko read karega agar notes na mile
+            "notes": {
+                "payment_id": loggedInPid // Webhook is note ko read karke sheet update karega
+            },
+            "handler": function (response){
+                alert("Payment successful! Webhook se balance update ho raha hai. Please wait 4 seconds...");
+                closePaymentModal();
+                setTimeout(syncBalance, 4000); 
+            },
+            "theme": {
+                "color": "#3498db"
+            }
+        };
+        
+        var rzp1 = new Razorpay(options);
+        rzp1.open();
+    }
+
+    // DYNAMIC SYNC
+    function syncBalance() {
+        if(!loggedInPid) return;
+        const payload = { action: "getBalance", pid: loggedInPid };
+
+        fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === "success") {
+                document.getElementById('dash-balance').innerText = data.balance;
+            }
+        })
+        .catch(err => console.log("Sync Error:", err));
+    }
+
+    function logout() {
+        document.getElementById('auth-box').classList.remove('hidden');
+        document.getElementById('dashboard-box').classList.add('hidden');
+        document.getElementById('login-pid').value = "";
+        document.getElementById('login-password').value = "";
+        document.getElementById('reg-success-msg').classList.add('hidden');
+        loggedInPid = "";
+    }
+</script>
+
+</body>
+</html>
